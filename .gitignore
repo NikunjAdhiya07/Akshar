@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+.env.local
+data/
+fonts/noto-src/
+fonts/*.zip
+fonts/_*.png
+fonts/_*.pdf
+fonts/_*.txt
+*.log
+.DS_Store

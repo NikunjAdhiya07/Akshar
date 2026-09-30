@@ -12,6 +12,31 @@ python -m venv .venv
 
 Open http://127.0.0.1:8765
 
+## Deploy (important)
+
+Akshar is a **Python FastAPI** app with OCR. **Vercel cannot run the full server** (OpenCV, RapidOCR, PyMuPDF). A Vercel deploy of only the README shows a 404.
+
+**Recommended host: [Render](https://render.com)**
+
+1. Push this repo to GitHub (already linked as `NikunjAdhiya07/Akshar`).
+2. Render → **New → Blueprint** → select the repo (uses `render.yaml`), or **New Web Service** → connect the repo.
+3. Build: `pip install -r requirements.txt` · Start: `python run.py`
+4. Add env vars from `.env` (`SUPABASE_*` if you use cloud sync). `PORT` is set by Render automatically.
+5. After deploy, open the Render URL (not the Vercel URL) for the working studio.
+
+Docker: `docker build -t akshar .` then `docker run -p 8765:8765 -e AKSHAR_HOST=0.0.0.0 akshar`
+
+## Supabase (optional cloud sync)
+
+Local job folders still work without cloud. To mirror job metadata and uploads to Supabase:
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. Copy `.env.example` to `.env` and fill `SUPABASE_URL` plus `SUPABASE_SERVICE_ROLE_KEY` (Project Settings → API).
+3. In Supabase → SQL Editor, run `supabase/schema.sql`.
+4. Restart the studio. `GET /api/health` reports whether cloud is connected.
+
+When configured, each save upserts into `akshar_jobs` and uploads the source file to the `akshar-documents` bucket. Cloud failures are logged and never block local processing.
+
 Workflow: upload a PDF, JPG, or PNG, review the side-by-side preview, correct any Gujarati block, then export PDF, PNG, or JPG. Multi-page files are processed one page at a time, and a failed page does not discard the others.
 
 ## How a page is rebuilt

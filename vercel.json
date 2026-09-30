@@ -1,0 +1,5 @@
+{
+  "buildCommand": "echo Deploy Akshar on Render — see README and render.yaml",
+  "outputDirectory": "app/static",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}

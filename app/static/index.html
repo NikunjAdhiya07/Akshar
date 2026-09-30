@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Akshar — English to Gujarati</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,650&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css?v=6">
+</head>
+<body>
+  <div class="wash" aria-hidden="true"></div>
+  <header class="top">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"><span class="orb orb-mark"><i></i></span></span>
+      <div>
+        <strong>Akshar</strong>
+        <em>English to Gujarati</em>
+      </div>
+    </div>
+    <ol class="steps" id="steps">
+      <li class="on">Upload</li>
+      <li>Detect</li>
+      <li>Translate</li>
+      <li>Preview</li>
+      <li>Export</li>
+    </ol>
+    <div class="export-bar">
+      <label>Format
+        <select id="format">
+          <option value="pdf">Gujarati PDF</option>
+          <option value="png">PNG</option>
+          <option value="jpg">JPG</option>
+        </select>
+      </label>
+      <label>Quality
+        <select id="dpi">
+          <option value="standard">Standard · 150 DPI</option>
+          <option value="high" selected>High · 300 DPI</option>
+          <option value="print">Print · 600 DPI</option>
+        </select>
+      </label>
+      <button id="export" class="primary" disabled>Export</button>
+      <a id="download" class="download" hidden>Download</a>
+    </div>
+  </header>
+
+  <main>
+    <aside class="rail">
+      <section class="drop" id="drop">
+        <input id="file" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" hidden>
+        <div class="orb" aria-hidden="true"><i></i></div>
+        <p class="drop-kicker">New document</p>
+        <p class="drop-title">Drop an English PDF or image</p>
+        <p class="drop-copy">PDF, scanned PDF, JPG, or PNG. Multi-page files are processed page by page.</p>
+        <button id="browse" class="primary">Choose file</button>
+        <label class="check"><input id="force" type="checkbox"> Force OCR, even if the PDF has a text layer</label>
+      </section>
+      <section class="panel">
+        <h2>Samples</h2>
+        <div class="samples">
+          <button data-sample="certificate"><span>Certificate</span><small>2 pages</small></button>
+          <button data-sample="scan"><span>Scanned PDF</span><small>OCR</small></button>
+          <button data-sample="image"><span>Page image</span><small>PNG</small></button>
+        </div>
+      </section>
+      <section id="summary" class="panel" hidden>
+        <h2>Document</h2>
+        <dl id="stats"></dl>
+        <div id="pages" class="pages"></div>
+        <div class="row">
+          <button id="retry" class="ghost" hidden>Retry this page</button>
+          <button id="approve" class="ghost" hidden>Approve page</button>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Progress</h2>
+        <ol id="log" class="log"></ol>
+      </section>
+    </aside>
+
+    <section class="stage">
+      <div class="stage-bar">
+        <div class="modes" id="modes">
+          <button data-mode="gujarati" class="on">Gujarati</button>
+          <button data-mode="original">Original</button>
+          <button data-mode="split">Compare</button>
+          <button data-mode="overlay">Overlay</button>
+        </div>
+        <label class="zoom">Zoom <input id="zoom" type="range" min="60" max="180" value="100"></label>
+        <button id="add" class="ghost" disabled>Add text</button>
+      </div>
+      <div id="canvas" class="canvas">
+        <div class="empty" id="empty">
+          <p class="empty-kicker">Studio</p>
+          <p>Upload a document to detect English text, translate it into Gujarati, and rebuild the original layout.</p>
+        </div>
+      </div>
+    </section>
+
+    <aside class="editor">
+      <section class="panel">
+        <h2>Text</h2>
+        <p id="editor-empty" class="muted">Select a block on the page to correct its Gujarati.</p>
+        <form id="editor-form" hidden>
+          <p class="kind" id="kind"></p>
+          <label>English
+            <textarea id="english" readonly></textarea>
+          </label>
+          <label>Gujarati
+            <textarea id="gujarati" lang="gu"></textarea>
+          </label>
+          <div class="row">
+            <button type="submit" class="primary">Save</button>
+            <button type="button" id="retranslate" class="ghost">Regenerate</button>
+            <button type="button" id="remove" class="ghost danger">Remove</button>
+          </div>
+        </form>
+        <form id="manual" hidden>
+          <p class="kind">New block</p>
+          <label>English text
+            <textarea id="manual-text" placeholder="Type the English that should appear here"></textarea>
+          </label>
+          <div class="row">
+            <button type="submit" class="primary">Translate and place</button>
+            <button type="button" id="cancel-manual" class="ghost">Cancel</button>
+          </div>
+        </form>
+      </section>
+      <section class="panel review-panel">
+        <button type="button" id="review-toggle" class="review-toggle" aria-expanded="false" aria-controls="review-body">
+          <span>Review</span>
+          <span class="chevron" aria-hidden="true"></span>
+        </button>
+        <div id="review-body" class="review-body" hidden>
+          <p id="review-quote" class="review-quote" lang="gu"></p>
+          <p id="review-source" class="review-source"></p>
+          <ul id="issues" class="issues"></ul>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Blocks</h2>
+        <ul id="blocks" class="blocks"></ul>
+      </section>
+    </aside>
+  </main>
+
+  <div id="veil" class="veil" hidden role="status" aria-live="polite">
+    <div class="veil-card">
+      <div class="orb-wrap" aria-hidden="true">
+        <span class="scene-glow"></span>
+        <span class="ripple r1"></span>
+        <span class="ripple r2"></span>
+        <span class="ripple r3"></span>
+        <span class="page-stage">
+          <span class="page-sheet">
+            <span class="page-line"></span>
+            <span class="page-line"></span>
+            <span class="page-line"></span>
+            <span class="page-line short"></span>
+          </span>
+        </span>
+        <span class="glyph g1">A</span>
+        <span class="glyph g2">B</span>
+        <span class="glyph g3">C</span>
+        <span class="glyph g4">અ</span>
+        <span class="glyph g5">ક</span>
+        <span class="glyph g6">ગ</span>
+        <span class="glyph g7">જ</span>
+        <span class="glyph g8">ત</span>
+        <span class="spark s1"></span>
+        <span class="spark s2"></span>
+        <span class="spark s3"></span>
+        <span class="spark s4"></span>
+        <span class="spark s5"></span>
+        <span class="orbit"></span>
+        <span class="orbit orbit-b"></span>
+        <span class="orb orb-hero"><i></i><em></em></span>
+      </div>
+      <p class="veil-kicker" id="veil-kicker">Akshar</p>
+      <p class="veil-title" id="veil-title">Converting to Gujarati…</p>
+      <ol class="veil-steps" id="veil-steps">
+        <li data-step="analyze">Analyzing document</li>
+        <li data-step="translate">Translating content</li>
+        <li data-step="format">Preserving original formatting</li>
+      </ol>
+      <div class="veil-track" aria-hidden="true"><span id="veil-bar"></span></div>
+    </div>
+  </div>
+  <div id="toast" class="toast" hidden></div>
+  <script src="/static/app.js?v=6"></script>
+</body>
+</html>
