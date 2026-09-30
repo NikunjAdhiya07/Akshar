@@ -1232,15 +1232,23 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
     padding: 16px 14px 18px;
   }
   body:not(.has-job) .upload-hero {
-    padding: 22px 14px 18px;
-    min-height: 220px;
+    padding: 18px 14px 16px;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
   }
+  body:not(.has-job) .upload-mark {
+    width: 64px;
+    height: 64px;
+  }
   body:not(.has-job) .upload-title {
-    font-size: clamp(26px, 7vw, 34px);
+    margin-top: 10px;
+    font-size: clamp(24px, 6.5vw, 32px);
+  }
+  body:not(.has-job) .upload-hint {
+    margin-bottom: 12px;
   }
   body:not(.has-job) .upload-actions {
     width: 100%;
