@@ -1,14 +1,15 @@
 """Supabase client for Akshar.
 
 Local job folders remain the source of truth. When SUPABASE_URL and a key are
-set in .env, job metadata is mirrored to Postgres and source files can be
-stored in the `akshar-documents` bucket. Missing or failing cloud calls never
-block the studio.
+set, job metadata can be mirrored to Postgres and source files can go to the
+`akshar-documents` bucket. Cloud calls are optional and must never stall
+conversion — especially on Vercel serverless.
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,32 @@ from app.config import (
 )
 
 logger = logging.getLogger("akshar.supabase")
+
+# After a failure, skip cloud I/O briefly so conversion is not blocked by
+# repeated timeouts (e.g. missing table / storage bucket).
+_COOLDOWN_SECONDS = 120.0
+_sync_blocked_until = 0.0
+_upload_blocked_until = 0.0
+
+
+def _sync_allowed() -> bool:
+    return time.monotonic() >= _sync_blocked_until
+
+
+def _upload_allowed() -> bool:
+    return time.monotonic() >= _upload_blocked_until
+
+
+def _block_sync(reason: str) -> None:
+    global _sync_blocked_until
+    _sync_blocked_until = time.monotonic() + _COOLDOWN_SECONDS
+    logger.warning("Supabase sync paused for %ss: %s", int(_COOLDOWN_SECONDS), reason)
+
+
+def _block_upload(reason: str) -> None:
+    global _upload_blocked_until
+    _upload_blocked_until = time.monotonic() + _COOLDOWN_SECONDS
+    logger.warning("Supabase upload paused for %ss: %s", int(_COOLDOWN_SECONDS), reason)
 
 
 @lru_cache(maxsize=1)
@@ -38,6 +65,14 @@ def get_supabase():
 def status() -> dict[str, Any]:
     if not supabase_configured():
         return {"configured": False, "connected": False, "message": "Set SUPABASE_URL and a key in .env"}
+    if not _sync_allowed():
+        return {
+            "configured": True,
+            "connected": False,
+            "url": SUPABASE_URL,
+            "bucket": SUPABASE_STORAGE_BUCKET,
+            "message": "Temporarily paused after a previous cloud error",
+        }
     client = get_supabase()
     if client is None:
         return {"configured": True, "connected": False, "message": "Client could not be created"}
@@ -51,6 +86,7 @@ def status() -> dict[str, Any]:
             "message": "Connected",
         }
     except Exception as exc:
+        _block_sync(str(exc))
         return {
             "configured": True,
             "connected": False,
@@ -61,7 +97,9 @@ def status() -> dict[str, Any]:
 
 
 def sync_job(job) -> None:
-    """Upsert job metadata. Safe to call on every local save."""
+    """Upsert job metadata. Safe no-op when cloud is down or cooling off."""
+    if not _sync_allowed():
+        return
     client = get_supabase()
     if client is None:
         return
@@ -83,11 +121,13 @@ def sync_job(job) -> None:
         }
         client.table("akshar_jobs").upsert(row).execute()
     except Exception as exc:
-        logger.warning("Supabase job sync skipped for %s: %s", job.id, exc)
+        _block_sync(str(exc))
 
 
 def upload_document(job_id: str, path: Path, remote_name: str | None = None) -> str | None:
     """Upload a local file into the documents bucket. Returns the object path."""
+    if not _upload_allowed():
+        return None
     client = get_supabase()
     if client is None or not path.is_file():
         return None
@@ -101,7 +141,7 @@ def upload_document(job_id: str, path: Path, remote_name: str | None = None) -> 
         )
         return object_path
     except Exception as exc:
-        logger.warning("Supabase upload skipped for %s: %s", object_path, exc)
+        _block_upload(str(exc))
         return None
 
 

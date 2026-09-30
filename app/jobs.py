@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.config import JOBS_DIR, ensure_dirs
+from app.config import JOBS_DIR, ON_VERCEL, ensure_dirs
 from app.models import Job
 
 _guard = threading.Lock()
@@ -58,23 +58,27 @@ def create_job(source: Path, original_name: str, force_ocr: bool = False) -> Job
     with _guard:
         _jobs[job_id] = job
         _locks[job_id] = threading.Lock()
-    save_job(job)
-    try:
-        from app.supabase_client import upload_document
+    save_job(job, cloud=False)
+    # Defer cloud upload — never block the conversion hot path on Vercel.
+    if not ON_VERCEL:
+        try:
+            from app.supabase_client import upload_document
 
-        upload_document(job.id, stored, filename)
-    except Exception:
-        pass
+            upload_document(job.id, stored, filename)
+        except Exception:
+            pass
     return job
 
 
-def save_job(job: Job) -> None:
+def save_job(job: Job, *, cloud: bool = True) -> None:
     folder = job_dir(job.id)
     folder.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(job.to_dict(), ensure_ascii=False, indent=2)
+    payload = json.dumps(job.to_dict(), ensure_ascii=False, indent=None if ON_VERCEL else 2)
     temporary = folder / "job.json.tmp"
     temporary.write_text(payload, encoding="utf-8")
     temporary.replace(folder / "job.json")
+    if not cloud:
+        return
     try:
         from app.supabase_client import sync_job
 
@@ -104,8 +108,9 @@ def page_dir(job_id: str, index: int) -> Path:
     return folder
 
 
-def note(job: Job, message: str) -> None:
+def note(job: Job, message: str, *, cloud: bool = False) -> None:
+    """Record progress locally. Cloud sync is off by default so Vercel stays fast."""
     job.log.append(message)
     job.stage = message
     job.revision += 1
-    save_job(job)
+    save_job(job, cloud=cloud)

@@ -49,6 +49,10 @@ class GoogleGujaratiTranslator:
         return [value if value is not None else texts[index] for index, value in enumerate(results)]
 
     def _translate_pending(self, texts: list[str]) -> list[str]:
+        from app.config import ON_VERCEL
+
+        # Keep a small gap for rate limits; stay lean on serverless time budgets.
+        pause = 0.05 if ON_VERCEL else 0.15
         output: list[str] = []
         failures = 0
         last_error: Exception | None = None
@@ -59,7 +63,7 @@ class GoogleGujaratiTranslator:
                 last_error = exc
                 failures += 1
                 output.append(text)
-            time.sleep(0.15)
+            time.sleep(pause)
         if failures == len(texts) and last_error is not None:
             raise TranslationError(
                 "Translation service is unavailable. Check the network and try again."

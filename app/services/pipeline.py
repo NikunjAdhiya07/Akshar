@@ -32,7 +32,7 @@ def process_job(job_id: str, translator=None) -> None:
     except Exception as exc:
         job.status = "error"
         job.error = str(exc)
-        note(job, str(exc))
+        note(job, str(exc), cloud=True)
         return
     job.page_count = document.page_count
     job.pages = [
@@ -41,7 +41,7 @@ def process_job(job_id: str, translator=None) -> None:
     ]
     job.blocks = []
     job.issues = []
-    save_job(job)
+    save_job(job, cloud=False)
     try:
         for index in range(document.page_count):
             job.page_index = index
@@ -55,7 +55,7 @@ def process_job(job_id: str, translator=None) -> None:
         job.status = "error"
         job.error = job.error or "No page could be processed."
     job.revision += 1
-    save_job(job)
+    save_job(job, cloud=True)
 
 
 def retry_page(job_id: str, page_index: int, translator=None) -> None:
