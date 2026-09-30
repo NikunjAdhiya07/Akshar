@@ -7,7 +7,7 @@ import uuid
 import numpy as np
 from PIL import Image
 
-from app.config import BASE_DPI
+from app.config import BASE_DPI, ON_VERCEL, VERCEL_MAX_PAGES
 from app.jobs import job_dir, load_job, note, page_dir, save_job
 from app.models import Issue, PageState, TextBlock
 from app.services.document_loader import open_document
@@ -21,31 +21,39 @@ from app.services.validation import validate_blocks
 _digital = DigitalPdfExtractor()
 
 
-def process_job(job_id: str, translator=None) -> None:
+def process_job(job_id: str, translator=None, on_progress=None) -> None:
     job = load_job(job_id)
     provider = translator or get_translator()
     source = job_dir(job_id) / job.filename
     job.status = "processing"
     note(job, "Opening document")
+    _emit(on_progress, job)
     try:
         document = open_document(source)
     except Exception as exc:
         job.status = "error"
         job.error = str(exc)
         note(job, str(exc), cloud=True)
+        _emit(on_progress, job)
         return
-    job.page_count = document.page_count
+    total_pages = document.page_count
+    limit = min(total_pages, VERCEL_MAX_PAGES) if ON_VERCEL else total_pages
+    job.page_count = limit
+    if ON_VERCEL and total_pages > limit:
+        note(job, f"Serverless mode: converting first {limit} of {total_pages} pages")
     job.pages = [
         PageState(index=index, width_pt=document.page_size(index)[0], height_pt=document.page_size(index)[1])
-        for index in range(document.page_count)
+        for index in range(limit)
     ]
     job.blocks = []
     job.issues = []
     save_job(job, cloud=False)
+    _emit(on_progress, job)
     try:
-        for index in range(document.page_count):
+        for index in range(limit):
             job.page_index = index
             _process_page(job, document, index, provider, replace_blocks=True)
+            _emit(on_progress, job)
     finally:
         document.close()
     if any(page.render_status == "done" for page in job.pages):
@@ -56,6 +64,16 @@ def process_job(job_id: str, translator=None) -> None:
         job.error = job.error or "No page could be processed."
     job.revision += 1
     save_job(job, cloud=True)
+    _emit(on_progress, job)
+
+
+def _emit(on_progress, job) -> None:
+    if on_progress is None:
+        return
+    try:
+        on_progress(job.to_dict())
+    except Exception:
+        pass
 
 
 def retry_page(job_id: str, page_index: int, translator=None) -> None:
@@ -159,7 +177,8 @@ def _process_page(job, document, index: int, provider, replace_blocks: bool) -> 
         page.width_px = int(image.shape[1])
         page.height_px = int(image.shape[0])
         lines, engine = _detect(document, index, image, job.force_ocr)
-        _sample_colors(image, lines, page.width_pt, page.height_pt)
+        if not ON_VERCEL:
+            _sample_colors(image, lines, page.width_pt, page.height_pt)
         page.engine = engine
         page.ocr_status = "done"
         drawings = []
@@ -223,10 +242,13 @@ def _paint(job, image: np.ndarray, index: int) -> None:
         block.fit_scale = 1
     preview, render_issues = render_preview(image, blocks, page.width_pt, page.height_pt, index, BASE_DPI)
     _save_rgb(page_dir(job.id, index) / "preview.png", preview)
-    checked = validate_blocks(blocks)
     job.issues = [issue for issue in job.issues if issue.page != index]
-    job.issues.extend(checked)
-    job.issues.extend(render_issues)
+    if ON_VERCEL:
+        job.issues.extend(render_issues)
+    else:
+        checked = validate_blocks(blocks)
+        job.issues.extend(checked)
+        job.issues.extend(render_issues)
 
 
 def _detect(document, index: int, image: np.ndarray, force_ocr: bool):

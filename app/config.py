@@ -25,10 +25,12 @@ CACHE_DIR = DATA_DIR / "cache"
 SAMPLES_DIR = ROOT / "samples"
 STATIC_DIR = ROOT / "app" / "static"
 
-# Lower raster DPI on Vercel so OCR finishes inside the function time budget.
-BASE_DPI = 110 if ON_VERCEL else 150
+# Lean raster size on Vercel so OCR/render finish inside the function budget.
+BASE_DPI = 96 if ON_VERCEL else 150
 MAX_UPLOAD_BYTES = 80 * 1024 * 1024
-MAX_RASTER_SIDE = 10_000
+MAX_RASTER_SIDE = 4_500 if ON_VERCEL else 10_000
+# Soft page cap for serverless time limits (full docs still work locally / on Render).
+VERCEL_MAX_PAGES = 2
 
 HOST = os.environ.get("AKSHAR_HOST") or (
     "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1"

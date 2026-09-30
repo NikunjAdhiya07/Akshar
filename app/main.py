@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
+import queue
 import threading
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -91,6 +94,7 @@ def health():
         "supabase": supabase_status(),
     }
 
+
 @app.post("/api/jobs")
 async def upload(file: UploadFile = File(...), force_ocr: str = Form("false")):
     from app.services.pipeline import process_job
@@ -111,9 +115,46 @@ async def upload(file: UploadFile = File(...), force_ocr: str = Form("false")):
         job = create_job(temporary, name, force_ocr=force_ocr.lower() in {"1", "true", "yes", "on"})
     finally:
         temporary.unlink(missing_ok=True)
-    _start(job.id, process_job)
-    return job.to_dict()
 
+    # Local: return immediately and process in a background thread (fluent polling UI).
+    if not ON_VERCEL:
+        _start(job.id, process_job)
+        return job.to_dict()
+
+    # Vercel: stream progress on the same request so the UI updates like local polling.
+    events: queue.Queue = queue.Queue()
+
+    def runner() -> None:
+        with _workers_guard:
+            _workers.add(job.id)
+        try:
+            def on_progress(payload: dict) -> None:
+                events.put({"event": "progress", "job": payload})
+
+            process_job(job.id, on_progress=on_progress)
+            events.put({"event": "done", "job": load_job(job.id).to_dict()})
+        except Exception as exc:
+            events.put({"event": "error", "detail": str(exc), "job": load_job(job.id).to_dict()})
+        finally:
+            with _workers_guard:
+                _workers.discard(job.id)
+            events.put(None)
+
+    threading.Thread(target=runner, daemon=True).start()
+
+    async def generate():
+        yield (json.dumps({"event": "started", "job": job.to_dict()}, ensure_ascii=False) + "\n").encode("utf-8")
+        while True:
+            item = await asyncio.to_thread(events.get)
+            if item is None:
+                break
+            yield (json.dumps(item, ensure_ascii=False) + "\n").encode("utf-8")
+
+    return StreamingResponse(
+        generate(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 @app.post("/api/samples/{name}")
 def open_sample(name: str, force_ocr: bool = False):

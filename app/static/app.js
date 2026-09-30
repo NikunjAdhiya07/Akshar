@@ -26,11 +26,135 @@ function toast(message) {
   toast._timer = setTimeout(() => { node.hidden = true; }, 4200);
 }
 
-async function api(url, options) {
+async function api(url, options = {}) {
   const response = await fetch(url, options);
+  const type = response.headers.get("content-type") || "";
+  if (type.includes("application/x-ndjson") || type.includes("ndjson")) {
+    return readJobStream(response);
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.detail || "Request failed");
   return data;
+}
+
+async function readJobStream(response) {
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail || `Conversion failed (${response.status})`);
+  }
+  if (!response.body) throw new Error("No conversion stream from server");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let job = null;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      let message;
+      try { message = JSON.parse(line); } catch { continue; }
+      if (message.job) {
+        job = message.job;
+        state.job = job;
+        applyStreamProgress(job);
+        render();
+      }
+      if (message.event === "error") {
+        throw new Error(message.detail || job?.error || "Conversion failed");
+      }
+    }
+  }
+  if (!job) throw new Error("Conversion ended without a result");
+  return job;
+}
+
+function applyStreamProgress(job) {
+  stopFakeProgress();
+  const veil = $("veil");
+  if (!veil || veil.hidden) return;
+  const stage = conversionStage(job);
+  veil.dataset.stage = stage.id === "start" ? "analyze" : stage.id;
+  $("veil-title").textContent = job.stage || stage.title;
+  $("veil-file").textContent = job.source_name || $("veil-file").textContent;
+  $("veil-bar").style.width = stage.progress;
+}
+
+async function convertItem(item) {
+  item.status = "converting";
+  item.error = null;
+  renderQueue();
+  state.waitingUpload = true;
+  state.converting = true;
+  showBusyVeil("Converting to Gujarati…", item.name);
+  focusResult();
+  const body = new FormData();
+  body.append("file", item.file);
+  body.append("force_ocr", $("force").checked ? "true" : "false");
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), 55_000) : null;
+  try {
+    const job = await api("/api/jobs", {
+      method: "POST",
+      body,
+      signal: controller ? controller.signal : undefined,
+    });
+    item.job = job;
+    if (job.status === "error") {
+      item.status = "failed";
+      item.error = job.error || "Conversion failed";
+    } else if (job.status === "processing" || job.status === "queued") {
+      // Local fluent path: request returned early, keep polling.
+      item.status = "converting";
+      state.activeItemId = item.id;
+      state.job = job;
+      render();
+      await pollUntilReady();
+      item.job = state.job;
+      if (state.job?.status === "ready") {
+        item.status = "completed";
+        openCompleted(item.id, { silent: true });
+      } else {
+        item.status = "failed";
+        item.error = state.job?.error || "Conversion failed";
+      }
+    } else {
+      item.status = "completed";
+      openCompleted(item.id, { silent: true });
+    }
+  } catch (error) {
+    item.status = "failed";
+    const aborted = error?.name === "AbortError";
+    item.error = aborted
+      ? "Timed out on Vercel. Use a single-page PDF/image, or prefer text PDFs over heavy scans."
+      : (error.message || "Conversion failed");
+    toast(item.error);
+  } finally {
+    if (timer) clearTimeout(timer);
+    state.waitingUpload = false;
+    const moreWaiting = state.queue.some((entry) => entry.status === "waiting");
+    if (!(state.converting && moreWaiting)) {
+      stopFakeProgress();
+      updateVeil(false);
+    }
+    renderQueue();
+    render();
+  }
+}
+
+async function pollUntilReady() {
+  if (!state.job) return;
+  const started = Date.now();
+  while (state.job && (state.job.status === "processing" || state.job.status === "queued")) {
+    if (Date.now() - started > 55_000) throw new Error("Conversion is taking too long. Try a smaller file.");
+    state.job = await api(`/api/jobs/${state.job.id}`);
+    applyStreamProgress(state.job);
+    render();
+    await sleep(700);
+  }
 }
 
 function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
@@ -149,42 +273,6 @@ function resetForReupload() {
   render();
   renderQueue();
   $("drop")?.scrollIntoView({ behavior: "smooth", block: "center" });
-}
-
-async function convertItem(item) {
-  item.status = "converting";
-  item.error = null;
-  renderQueue();
-  state.waitingUpload = true;
-  state.converting = true;
-  showBusyVeil("Converting to Gujarati…", item.name);
-  focusResult();
-  const body = new FormData();
-  body.append("file", item.file);
-  body.append("force_ocr", $("force").checked ? "true" : "false");
-  try {
-    const job = await api("/api/jobs", { method: "POST", body });
-    item.job = job;
-    if (job.status === "error") {
-      item.status = "failed";
-      item.error = job.error || "Conversion failed";
-    } else {
-      item.status = "completed";
-      openCompleted(item.id, { silent: true });
-    }
-  } catch (error) {
-    item.status = "failed";
-    item.error = error.message;
-  } finally {
-    state.waitingUpload = false;
-    const moreWaiting = state.queue.some((entry) => entry.status === "waiting");
-    if (!(state.converting && moreWaiting)) {
-      stopFakeProgress();
-      updateVeil(false);
-    }
-    renderQueue();
-    render();
-  }
 }
 
 async function confirmConversion() {
