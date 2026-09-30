@@ -12,17 +12,38 @@ python -m venv .venv
 
 Open http://127.0.0.1:8765
 
-## Deploy (important)
+## Deploy on Vercel
 
-Akshar is a **Python FastAPI** app with OCR. **Vercel cannot run the full server** (OpenCV, RapidOCR, PyMuPDF). A Vercel deploy of only the README shows a 404.
+Akshar can run on Vercel as a **Python FastAPI** serverless function.
 
-**Recommended host: [Render](https://render.com)**
+1. Push this repo to GitHub (already done for `NikunjAdhiya07/Akshar`).
+2. Vercel → **Add New Project** → import that repo.
+3. Framework preset: **Other**. Root directory: `.`
+4. Add Environment Variables (same as `.env`):
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `SUPABASE_ANON_KEY` (optional)
+   - `SUPABASE_STORAGE_BUCKET` = `akshar-documents`
+5. Deploy.
 
-1. Push this repo to GitHub (already linked as `NikunjAdhiya07/Akshar`).
-2. Render → **New → Blueprint** → select the repo (uses `render.yaml`), or **New Web Service** → connect the repo.
-3. Build: `pip install -r requirements.txt` · Start: `python run.py`
-4. Add env vars from `.env` (`SUPABASE_*` if you use cloud sync). `PORT` is set by Render automatically.
-5. After deploy, open the Render URL (not the Vercel URL) for the working studio.
+What was fixed for Vercel:
+- `api/index.py` exports the FastAPI `app`
+- `vercel.json` routes all traffic to that function (no empty static 404)
+- Job files use `/tmp` on Vercel
+- Processing runs **inside** the request (background threads do not work on serverless)
+
+Limits to know:
+- Hobby functions time out at **60 seconds**. Prefer single-page images; multi-page PDFs may need **Pro** (`maxDuration` 300 in `vercel.json`).
+- Bundle size is large (OCR stack). If the build fails on size, use **Render** with `render.yaml` instead.
+
+## Deploy on Render
+
+**Recommended for heavy OCR / multi-page PDFs.**
+
+1. [render.com](https://render.com) → **New → Blueprint** (or Web Service) → select `NikunjAdhiya07/Akshar`
+2. Build: `pip install -r requirements.txt` · Start: `python run.py`
+3. Add env vars from `.env`. `PORT` is set by Render automatically.
+4. Open the Render URL for the working studio.
 
 Docker: `docker build -t akshar .` then `docker run -p 8765:8765 -e AKSHAR_HOST=0.0.0.0 akshar`
 

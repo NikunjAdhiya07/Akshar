@@ -1,0 +1,12 @@
+.venv
+.git
+data
+__pycache__
+*.pyc
+.env
+.env.local
+fonts/noto-src
+fonts/*.zip
+*.log
+.pytest_cache
+tests

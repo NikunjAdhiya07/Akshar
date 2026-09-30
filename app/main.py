@@ -17,6 +17,7 @@ from app.config import (
     HOST,
     JOBS_DIR,
     MAX_UPLOAD_BYTES,
+    ON_VERCEL,
     PORT,
     STATIC_DIR,
     ensure_dirs,
@@ -43,7 +44,9 @@ _workers_guard = threading.Lock()
 async def lifespan(_app: FastAPI):
     ensure_dirs()
     ensure_fonts()
-    ensure_samples()
+    # Skip building sample PDFs on every cold start in serverless.
+    if not ON_VERCEL:
+        ensure_samples()
     yield
 
 
@@ -249,6 +252,17 @@ def _require_ready(job_id: str) -> None:
 
 
 def _start(job_id: str, target) -> None:
+    # Vercel kills background threads when the HTTP response finishes.
+    if ON_VERCEL:
+        with _workers_guard:
+            _workers.add(job_id)
+        try:
+            target(job_id)
+        finally:
+            with _workers_guard:
+                _workers.discard(job_id)
+        return
+
     def runner():
         try:
             target(job_id)

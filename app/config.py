@@ -10,10 +10,13 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / ".env")
 
+ON_VERCEL = bool(os.environ.get("VERCEL"))
+
 FONTS_DIR = ROOT / "fonts"
 FONT_REGULAR = FONTS_DIR / "NotoSansGujarati-Regular.ttf"
 FONT_BOLD = FONTS_DIR / "NotoSansGujarati-Bold.ttf"
-DATA_DIR = ROOT / "data"
+# Serverless has a read-only filesystem except /tmp.
+DATA_DIR = Path("/tmp/akshar-data") if ON_VERCEL else (ROOT / "data")
 JOBS_DIR = DATA_DIR / "jobs"
 CACHE_DIR = DATA_DIR / "cache"
 SAMPLES_DIR = ROOT / "samples"
