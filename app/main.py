@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import uuid
 from contextlib import asynccontextmanager
@@ -24,17 +25,8 @@ from app.config import (
     ensure_fonts,
 )
 from app.jobs import create_job, job_dir, load_job, page_dir, save_job
-from app.samples import ensure_samples
-from app.services.export import export_job
-from app.services.pipeline import (
-    add_block,
-    approve_page,
-    delete_block,
-    process_job,
-    retranslate_block,
-    retry_page,
-    update_translation,
-)
+
+logger = logging.getLogger("akshar")
 
 _workers: set[str] = set()
 _workers_guard = threading.Lock()
@@ -43,16 +35,23 @@ _workers_guard = threading.Lock()
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     ensure_dirs()
-    ensure_fonts()
-    # Skip building sample PDFs on every cold start in serverless.
+    try:
+        ensure_fonts()
+    except FileNotFoundError as exc:
+        # Do not take down the whole function on a missing asset during cold start.
+        logger.error("%s", exc)
     if not ON_VERCEL:
+        from app.samples import ensure_samples
+
         ensure_samples()
     yield
 
 
 app = FastAPI(title="Akshar", lifespan=lifespan)
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-app.mount("/fonts", StaticFiles(directory=FONTS_DIR), name="fonts")
+if STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+if FONTS_DIR.is_dir():
+    app.mount("/fonts", StaticFiles(directory=str(FONTS_DIR)), name="fonts")
 
 
 class TranslationUpdate(BaseModel):
@@ -71,18 +70,31 @@ class ExportRequest(BaseModel):
 
 @app.get("/")
 def index():
-    return FileResponse(STATIC_DIR / "index.html")
+    index_path = STATIC_DIR / "index.html"
+    if not index_path.is_file():
+        raise HTTPException(500, "Studio UI is missing from the deploy bundle.")
+    return FileResponse(index_path)
 
 
 @app.get("/api/health")
 def health():
     from app.supabase_client import status as supabase_status
 
-    return {"ok": True, "supabase": supabase_status()}
-
+    return {
+        "ok": True,
+        "vercel": ON_VERCEL,
+        "fonts": {
+            "dir": str(FONTS_DIR),
+            "regular": (FONTS_DIR / "NotoSansGujarati-Regular.ttf").is_file(),
+            "bold": (FONTS_DIR / "NotoSansGujarati-Bold.ttf").is_file(),
+        },
+        "supabase": supabase_status(),
+    }
 
 @app.post("/api/jobs")
 async def upload(file: UploadFile = File(...), force_ocr: str = Form("false")):
+    from app.services.pipeline import process_job
+
     name = file.filename or "document"
     if Path(name).suffix.lower() not in {".pdf", ".png", ".jpg", ".jpeg"}:
         raise HTTPException(400, "Upload a PDF, JPG, or PNG file.")
@@ -105,6 +117,11 @@ async def upload(file: UploadFile = File(...), force_ocr: str = Form("false")):
 
 @app.post("/api/samples/{name}")
 def open_sample(name: str, force_ocr: bool = False):
+    from app.samples import ensure_samples
+    from app.services.pipeline import process_job
+
+    if ON_VERCEL:
+        raise HTTPException(400, "Samples are disabled on Vercel. Upload a PDF or image instead.")
     samples = ensure_samples()
     if name not in samples:
         raise HTTPException(404, "Unknown sample")
@@ -130,6 +147,8 @@ def preview(job_id: str, index: int):
 
 @app.patch("/api/jobs/{job_id}/blocks/{block_id}")
 def edit_block(job_id: str, block_id: str, body: TranslationUpdate):
+    from app.services.pipeline import update_translation
+
     _require_ready(job_id)
     try:
         update_translation(job_id, block_id, body.translation)
@@ -140,6 +159,8 @@ def edit_block(job_id: str, block_id: str, body: TranslationUpdate):
 
 @app.post("/api/jobs/{job_id}/blocks/{block_id}/retranslate")
 def regenerate(job_id: str, block_id: str):
+    from app.services.pipeline import retranslate_block
+
     _require_ready(job_id)
     try:
         retranslate_block(job_id, block_id)
@@ -152,6 +173,8 @@ def regenerate(job_id: str, block_id: str):
 
 @app.post("/api/jobs/{job_id}/pages/{index}/blocks")
 def create_block(job_id: str, index: int, body: ManualBlock):
+    from app.services.pipeline import add_block
+
     _require_ready(job_id)
     if len(body.bbox) != 4 or not body.text.strip():
         raise HTTPException(400, "Draw a box and enter the English text.")
@@ -164,6 +187,8 @@ def create_block(job_id: str, index: int, body: ManualBlock):
 
 @app.delete("/api/jobs/{job_id}/blocks/{block_id}")
 def remove_block(job_id: str, block_id: str):
+    from app.services.pipeline import delete_block
+
     _require_ready(job_id)
     try:
         delete_block(job_id, block_id)
@@ -174,6 +199,8 @@ def remove_block(job_id: str, block_id: str):
 
 @app.post("/api/jobs/{job_id}/pages/{index}/retry")
 def retry(job_id: str, index: int):
+    from app.services.pipeline import retry_page
+
     job = _job(job_id)
     if index < 0 or index >= job.page_count:
         raise HTTPException(404, "That page does not exist.")
@@ -185,6 +212,8 @@ def retry(job_id: str, index: int):
 
 @app.post("/api/jobs/{job_id}/pages/{index}/approve")
 def approve(job_id: str, index: int, approved: bool = True):
+    from app.services.pipeline import approve_page
+
     job = _job(job_id)
     if index < 0 or index >= len(job.pages):
         raise HTTPException(404, "That page does not exist.")
@@ -194,6 +223,8 @@ def approve(job_id: str, index: int, approved: bool = True):
 
 @app.post("/api/jobs/{job_id}/export")
 def start_export(job_id: str, body: ExportRequest):
+    from app.services.export import export_job
+
     job = _job(job_id)
     if job.status != "ready":
         raise HTTPException(409, "Wait until translation finishes before exporting.")

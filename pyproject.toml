@@ -36,3 +36,6 @@ requires-dist = [
   "requests",
   "colorlog",
 ]
+
+[tool.vercel]
+entrypoint = "api.index:app"

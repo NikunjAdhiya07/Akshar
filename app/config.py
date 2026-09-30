@@ -12,7 +12,10 @@ load_dotenv(ROOT / ".env")
 
 ON_VERCEL = bool(os.environ.get("VERCEL"))
 
-FONTS_DIR = ROOT / "fonts"
+FONTS_DIR = ROOT / "app" / "static" / "fonts"
+# Keep repo-root fonts/ as a fallback for older checkouts / Docker images.
+if not (FONTS_DIR / "NotoSansGujarati-Regular.ttf").is_file():
+    FONTS_DIR = ROOT / "fonts"
 FONT_REGULAR = FONTS_DIR / "NotoSansGujarati-Regular.ttf"
 FONT_BOLD = FONTS_DIR / "NotoSansGujarati-Bold.ttf"
 # Serverless has a read-only filesystem except /tmp.
@@ -45,7 +48,9 @@ def supabase_configured() -> bool:
 
 
 def ensure_dirs() -> None:
-    for path in (JOBS_DIR, CACHE_DIR, SAMPLES_DIR, STATIC_DIR):
+    # On Vercel only /tmp is writable; never mkdir into the read-only deploy tree.
+    writable = (JOBS_DIR, CACHE_DIR) if ON_VERCEL else (JOBS_DIR, CACHE_DIR, SAMPLES_DIR, STATIC_DIR)
+    for path in writable:
         path.mkdir(parents=True, exist_ok=True)
 
 

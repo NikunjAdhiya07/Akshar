@@ -7,8 +7,8 @@
   "functions": {
     "api/index.py": {
       "maxDuration": 60,
-      "includeFiles": "{fonts/*.ttf,fonts/OFL.txt,app/static/**}",
-      "excludeFiles": "{tests/**,samples/**,supabase/**,fonts/noto-src/**,fonts/*.zip,.git/**,data/**,.venv/**,Dockerfile,render.yaml,README.md}"
+      "memory": 2048,
+      "includeFiles": "{app/static/**}"
     }
   },
   "rewrites": [
