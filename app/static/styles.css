@@ -60,7 +60,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   z-index: 0;
 }
 
-.top, main, .veil { position: relative; z-index: 1; }
+.top, main { position: relative; z-index: 1; }
 
 .top {
   height: 74px;
@@ -493,18 +493,22 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
 
 .veil[hidden] { display: none !important; }
 .veil {
-  position: fixed;
+  position: fixed !important;
   inset: 0;
-  z-index: 5;
+  z-index: 9999;
   display: grid;
   place-items: center;
   overflow: hidden;
+  -webkit-overflow-scrolling: touch;
   background:
     radial-gradient(680px 420px at 50% 38%, rgba(240, 178, 90, 0.28), transparent 62%),
     radial-gradient(420px 280px at 18% 80%, rgba(61, 125, 134, 0.18), transparent 70%),
-    rgba(10, 12, 16, 0.86);
+    rgba(10, 12, 16, 0.92);
   backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   animation: veil-in 0.45s var(--ease) both;
+  pointer-events: all;
+  touch-action: none;
 }
 .veil::before {
   content: "";
@@ -838,7 +842,16 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
   body { overflow: auto; }
   main { grid-template-columns: 1fr; height: auto; }
   .top { height: auto; flex-wrap: wrap; padding: 14px; }
-  .steps { order: 3; width: 100%; }
-  .stage { min-height: 70vh; margin: 0; border-radius: 0; }
+  .steps { order: 3; width: 100%; overflow-x: auto; }
+  .stage { min-height: 70vh; margin: 0; border-radius: 0; order: -1; }
   .rail, .editor { animation: none; }
+  body.has-job .rail .drop,
+  body.has-job .rail .samples { display: none; }
+  body.has-job .stage { min-height: 78vh; scroll-margin-top: 12px; }
+  .veil-card { width: min(420px, calc(100% - 28px)); padding: 8px; }
+  .veil-title { font-size: clamp(22px, 6vw, 30px); }
+  .orb-wrap { width: 180px; height: 180px; }
+  .orb-hero { width: 76px; height: 76px; left: 52px; top: 40px; }
+  .veil-steps { gap: 6px; margin: 14px 0 12px; }
+  .veil-steps li { font-size: 11px; padding: 5px 8px; }
 }

@@ -91,6 +91,8 @@ class RapidOcrProvider:
             return False
 
     def recognize(self, image: np.ndarray, dpi: int) -> list[DetectedLine]:
+        from app.config import ON_VERCEL
+
         engine = _rapid_engine()
         import cv2
 
@@ -112,7 +114,18 @@ class RapidOcrProvider:
             if x1 - x0 < 2 or y1 - y0 < 2:
                 continue
             height_px = max(1.0, y1 - y0)
-            cleaned, score = _refine_weak_line(engine, image, cleaned, float(score), int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max()))
+            # Second-pass OCR crops are too slow for serverless cold paths.
+            if not ON_VERCEL:
+                cleaned, score = _refine_weak_line(
+                    engine,
+                    image,
+                    cleaned,
+                    float(score),
+                    int(xs.min()),
+                    int(ys.min()),
+                    int(xs.max()),
+                    int(ys.max()),
+                )
             lines.append(
                 DetectedLine(
                     text=cleaned,

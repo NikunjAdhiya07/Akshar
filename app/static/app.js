@@ -8,6 +8,7 @@ const state = {
   polling: false,
   reveal: false,
   reviewOpen: false,
+  waitingUpload: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -29,6 +30,52 @@ async function api(url, options) {
 
 function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
+function focusResult() {
+  document.body.classList.toggle("has-job", !!state.job || state.waitingUpload);
+  const stage = document.querySelector(".stage");
+  if (stage && (state.job || state.waitingUpload)) {
+    stage.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function stopFakeProgress() {
+  clearInterval(stopFakeProgress._timer);
+  stopFakeProgress._timer = null;
+}
+
+function startFakeProgress() {
+  stopFakeProgress();
+  const steps = [
+    { pct: "22%", id: "analyze", title: "Uploading document…" },
+    { pct: "38%", id: "analyze", title: "Analyzing document…" },
+    { pct: "58%", id: "translate", title: "Translating content…" },
+    { pct: "78%", id: "format", title: "Preserving original formatting…" },
+    { pct: "90%", id: "format", title: "Preparing preview…" },
+  ];
+  let index = 0;
+  const apply = () => {
+    const step = steps[Math.min(index, steps.length - 1)];
+    const veil = $("veil");
+    veil.dataset.stage = step.id;
+    $("veil-title").textContent = step.title;
+    $("veil-bar").style.width = step.pct;
+    if (index < steps.length - 1) index += 1;
+  };
+  apply();
+  stopFakeProgress._timer = setInterval(apply, 1600);
+}
+
+function showBusyVeil(title) {
+  const veil = $("veil");
+  clearTimeout(updateVeil._hide);
+  veil.hidden = false;
+  veil.classList.remove("leave");
+  veil.dataset.stage = "analyze";
+  $("veil-title").textContent = title || "Converting to Gujarati…";
+  $("veil-bar").style.width = "14%";
+  startFakeProgress();
+}
+
 async function poll() {
   if (state.polling || !state.job) return;
   state.polling = true;
@@ -39,6 +86,7 @@ async function poll() {
       await sleep(700);
     }
     render();
+    if (state.job && state.job.status === "ready") focusResult();
   } catch (error) {
     toast(error.message);
   } finally {
@@ -51,16 +99,32 @@ function startJob(job) {
   state.page = 0;
   state.selected = null;
   state.reviewOpen = false;
+  state.waitingUpload = false;
+  stopFakeProgress();
   render();
-  poll();
+  focusResult();
+  if (job.status === "processing" || job.status === "queued" || job.export_status === "running") {
+    poll();
+  }
 }
 
 async function upload(file) {
   const body = new FormData();
   body.append("file", file);
   body.append("force_ocr", $("force").checked ? "true" : "false");
-  toast("Uploading…");
-  startJob(await api("/api/jobs", { method: "POST", body }));
+  state.waitingUpload = true;
+  showBusyVeil("Converting to Gujarati…");
+  focusResult();
+  try {
+    startJob(await api("/api/jobs", { method: "POST", body }));
+    if (state.job?.status === "ready") toast("Translation ready");
+    if (state.job?.status === "error") toast(state.job.error || "Conversion failed");
+  } catch (error) {
+    state.waitingUpload = false;
+    stopFakeProgress();
+    updateVeil(false);
+    toast(error.message);
+  }
 }
 
 $("browse").onclick = () => $("file").click();
@@ -80,8 +144,16 @@ drop.addEventListener("drop", (event) => {
 });
 document.querySelectorAll("[data-sample]").forEach((button) => {
   button.onclick = async () => {
-    try { startJob(await api(`/api/samples/${button.dataset.sample}`, { method: "POST" })); }
-    catch (error) { toast(error.message); }
+    try {
+      state.waitingUpload = true;
+      showBusyVeil("Converting sample…");
+      startJob(await api(`/api/samples/${button.dataset.sample}`, { method: "POST" }));
+    } catch (error) {
+      state.waitingUpload = false;
+      stopFakeProgress();
+      updateVeil(false);
+      toast(error.message);
+    }
   };
 });
 document.querySelectorAll("[data-mode]").forEach((button) => {
@@ -94,17 +166,25 @@ document.querySelectorAll("[data-mode]").forEach((button) => {
 $("zoom").oninput = () => renderCanvas();
 $("export").onclick = async () => {
   try {
+    showBusyVeil("Exporting…");
     state.job = await api(`/api/jobs/${state.job.id}/export`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ format: $("format").value, dpi: $("dpi").value }),
     });
+    stopFakeProgress();
     render();
     poll();
-  } catch (error) { toast(error.message); }
+  } catch (error) {
+    stopFakeProgress();
+    updateVeil(false);
+    toast(error.message);
+  }
 };
 $("retry").onclick = async () => {
+  showBusyVeil("Retrying page…");
   state.job = await api(`/api/jobs/${state.job.id}/pages/${state.page}/retry`, { method: "POST" });
+  stopFakeProgress();
   render();
   poll();
 };
@@ -194,22 +274,26 @@ function conversionStage(job) {
 
 function updateVeil(converting) {
   const veil = $("veil");
-  if (converting) {
+  if (converting || state.waitingUpload) {
     clearTimeout(updateVeil._hide);
     veil.hidden = false;
     veil.classList.remove("leave");
-    const stage = conversionStage(state.job);
-    veil.dataset.stage = stage.id === "start" ? "analyze" : stage.id;
-    const title = $("veil-title");
-    if (title.textContent !== stage.title) {
-      title.textContent = stage.title;
-      title.classList.remove("swap");
-      void title.offsetWidth;
-      title.classList.add("swap");
+    if (state.job && !state.waitingUpload) {
+      stopFakeProgress();
+      const stage = conversionStage(state.job);
+      veil.dataset.stage = stage.id === "start" ? "analyze" : stage.id;
+      const title = $("veil-title");
+      if (title.textContent !== stage.title) {
+        title.textContent = stage.title;
+        title.classList.remove("swap");
+        void title.offsetWidth;
+        title.classList.add("swap");
+      }
+      $("veil-bar").style.width = stage.progress;
     }
-    $("veil-bar").style.width = stage.progress;
     return;
   }
+  stopFakeProgress();
   if (veil.hidden || veil.classList.contains("leave")) return;
   veil.classList.add("leave");
   state.reveal = true;
@@ -222,12 +306,13 @@ function updateVeil(converting) {
 function render() {
   const job = state.job;
   const busy = job && (job.status === "processing" || job.status === "queued");
-  updateVeil(!!busy);
+  updateVeil(!!busy || state.waitingUpload);
+  document.body.classList.toggle("has-job", !!job || state.waitingUpload);
   $("export").disabled = !job || job.status !== "ready" || job.export_status === "running";
   $("add").disabled = !job || job.status !== "ready";
   $("summary").hidden = !job;
   const empty = $("empty");
-  if (empty) empty.hidden = !!job;
+  if (empty) empty.hidden = !!job || state.waitingUpload;
   const download = $("download");
   if (job && job.export_status === "ready" && job.export_file) {
     download.hidden = false;
@@ -337,7 +422,7 @@ function renderCanvas() {
     if (!$("empty")) return;
     return;
   }
-  if (job.status === "processing" || job.status === "queued") {
+  if (job.status === "processing" || job.status === "queued" || state.waitingUpload) {
     canvas.innerHTML = "";
     return;
   }

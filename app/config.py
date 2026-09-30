@@ -25,7 +25,8 @@ CACHE_DIR = DATA_DIR / "cache"
 SAMPLES_DIR = ROOT / "samples"
 STATIC_DIR = ROOT / "app" / "static"
 
-BASE_DPI = 150
+# Lower raster DPI on Vercel so OCR finishes inside the function time budget.
+BASE_DPI = 110 if ON_VERCEL else 150
 MAX_UPLOAD_BYTES = 80 * 1024 * 1024
 MAX_RASTER_SIDE = 10_000
 
