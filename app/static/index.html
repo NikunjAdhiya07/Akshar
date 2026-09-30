@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,650&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=8">
+  <link rel="stylesheet" href="/static/styles.css?v=9">
 </head>
 <body>
   <div class="wash" aria-hidden="true"></div>
@@ -35,23 +35,45 @@
 
   <main>
     <aside class="rail">
-      <section class="drop" id="drop">
+      <section class="upload-card" id="upload-card">
         <input id="file" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" hidden>
-        <div class="orb" aria-hidden="true"><i></i></div>
-        <p class="drop-kicker">New document</p>
-        <p class="drop-title">Drop an English PDF or image</p>
-        <p class="drop-copy">PDF, scanned PDF, JPG, or PNG. Multi-page files are processed page by page.</p>
-        <button id="browse" class="primary">Choose file</button>
-        <label class="check"><input id="force" type="checkbox"> Force OCR, even if the PDF has a text layer</label>
-      </section>
-      <section class="panel">
-        <h2>Samples</h2>
-        <div class="samples">
-          <button data-sample="certificate"><span>Certificate</span><small>2 pages</small></button>
-          <button data-sample="scan"><span>Scanned PDF</span><small>OCR</small></button>
-          <button data-sample="image"><span>Page image</span><small>PNG</small></button>
+        <input id="file-bulk" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple hidden>
+        <div class="upload-hero" id="drop">
+          <img class="upload-mark" src="/static/logo.jpg" alt="" aria-hidden="true">
+          <p class="upload-title">Upload</p>
+          <p class="upload-hint">PDF, JPG, or PNG</p>
+          <div class="upload-actions">
+            <button id="browse" class="primary" type="button">Choose file</button>
+            <button id="browse-bulk" class="ghost" type="button">Bulk upload</button>
+          </div>
+          <label class="check"><input id="force" type="checkbox"> Force OCR</label>
+        </div>
+
+        <div id="queue-panel" class="queue-panel" hidden>
+          <div class="queue-head">
+            <h2>Selected</h2>
+            <button id="clear-waiting" class="ghost danger tiny" type="button" hidden>Clear</button>
+          </div>
+          <ul id="queue-waiting" class="queue-list"></ul>
+          <div class="queue-confirm" id="queue-confirm" hidden>
+            <button id="confirm-convert" class="primary wide" type="button">Confirm for Conversion</button>
+          </div>
+        </div>
+
+        <div id="active-panel" class="queue-panel" hidden>
+          <h2>Converting</h2>
+          <ul id="queue-active" class="queue-list"></ul>
+        </div>
+
+        <div id="done-panel" class="queue-panel" hidden>
+          <div class="queue-head">
+            <h2>Completed</h2>
+            <button id="reupload" class="ghost tiny" type="button">Upload another</button>
+          </div>
+          <ul id="queue-done" class="queue-list"></ul>
         </div>
       </section>
+
       <section id="summary" class="panel" hidden>
         <h2>Document</h2>
         <dl id="stats"></dl>
@@ -61,14 +83,14 @@
           <button id="approve" class="ghost" hidden>Approve page</button>
         </div>
       </section>
-      <section class="panel">
+      <section class="panel compact-log">
         <h2>Progress</h2>
         <ol id="log" class="log"></ol>
       </section>
     </aside>
 
     <section class="stage">
-      <div class="stage-bar">
+      <div class="stage-bar" id="stage-bar" hidden>
         <div class="modes" id="modes">
           <button data-mode="gujarati" class="on">Gujarati</button>
           <button data-mode="original">Original</button>
@@ -79,8 +101,11 @@
       </div>
       <div id="canvas" class="canvas">
         <div class="empty" id="empty">
-          <p class="empty-kicker">Studio</p>
-          <p>Upload a document to detect English text, translate it into Gujarati, and rebuild the original layout.</p>
+          <div class="empty-brand">
+            <img src="/static/logo.jpg" alt="Akshar" width="72" height="72">
+            <p class="empty-title">Ready to convert</p>
+            <p class="empty-sub">Choose a file in the upload panel to begin</p>
+          </div>
         </div>
       </div>
     </section>
@@ -156,19 +181,21 @@
 
   <div id="veil" class="veil" hidden role="status" aria-live="polite">
     <div class="veil-card">
-      <div class="orb-wrap" aria-hidden="true">
+      <div class="orb-wrap convert-scene" aria-hidden="true">
         <span class="scene-glow"></span>
         <span class="ripple r1"></span>
         <span class="ripple r2"></span>
         <span class="ripple r3"></span>
-        <span class="page-stage">
-          <span class="page-sheet">
-            <span class="page-line"></span>
-            <span class="page-line"></span>
-            <span class="page-line"></span>
-            <span class="page-line short"></span>
-          </span>
+        <span class="convert-doc">
+          <span class="doc-fold"></span>
+          <span class="doc-line"></span>
+          <span class="doc-line"></span>
+          <span class="doc-line short"></span>
+          <span class="doc-scan"></span>
         </span>
+        <span class="lang-chip en">A</span>
+        <span class="lang-chip arrow">→</span>
+        <span class="lang-chip gu" lang="gu">અ</span>
         <span class="glyph g1">A</span>
         <span class="glyph g2">B</span>
         <span class="glyph g3">C</span>
@@ -184,10 +211,12 @@
         <span class="spark s5"></span>
         <span class="orbit"></span>
         <span class="orbit orbit-b"></span>
-        <span class="orb orb-hero"><i></i><em></em></span>
+        <span class="swoosh"></span>
+        <img class="logo-hero" src="/static/logo.jpg" alt="">
       </div>
       <p class="veil-kicker" id="veil-kicker">Akshar</p>
       <p class="veil-title" id="veil-title">Converting to Gujarati…</p>
+      <p class="veil-file" id="veil-file"></p>
       <ol class="veil-steps" id="veil-steps">
         <li data-step="analyze">Analyzing document</li>
         <li data-step="translate">Translating content</li>
@@ -197,6 +226,6 @@
     </div>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="/static/app.js?v=8"></script>
+  <script src="/static/app.js?v=9"></script>
 </body>
 </html>
