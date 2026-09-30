@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import io
 import logging
 import threading
 import uuid
@@ -11,6 +13,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from PIL import Image
 from pydantic import BaseModel
 
 from app.config import (
@@ -119,11 +122,15 @@ async def upload(file: UploadFile = File(...), force_ocr: str = Form("false")):
         return job.to_dict()
 
     # Vercel: process in-request and return JSON (streaming is unreliable behind the edge).
+    # Also attach inline page images + a preview PDF so the UI still works when the
+    # next request lands on a different serverless instance with an empty /tmp.
     with _workers_guard:
         _workers.add(job.id)
     try:
         process_job(job.id)
-        return load_job(job.id).to_dict()
+        payload = load_job(job.id).to_dict()
+        payload.update(_inline_assets(job.id))
+        return payload
     except Exception as exc:
         try:
             failed = load_job(job.id)
@@ -296,6 +303,68 @@ def _image(job_id: str, index: int, name: str):
     if not path.is_file():
         raise HTTPException(404, "Page image is not ready.")
     return FileResponse(path, media_type="image/png")
+
+
+def _jpeg_data_url(path: Path, max_side: int = 1400, quality: int = 72) -> str | None:
+    if not path.is_file():
+        return None
+    image = Image.open(path).convert("RGB")
+    image.thumbnail((max_side, max_side))
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG", quality=quality, optimize=True)
+    return "data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+def _inline_assets(job_id: str) -> dict:
+    """Bundle previews into the JSON response so Vercel /tmp does not have to survive."""
+    try:
+        job = load_job(job_id)
+    except Exception:
+        return {}
+    if job.status != "ready":
+        return {}
+
+    import pymupdf
+
+    inline_pages: list[dict] = []
+    pdf = pymupdf.open()
+    try:
+        for page in job.pages:
+            folder = page_dir(job_id, page.index)
+            original = _jpeg_data_url(folder / "original.png")
+            preview = _jpeg_data_url(folder / "preview.png")
+            inline_pages.append({
+                "index": page.index,
+                "original": original,
+                "preview": preview,
+            })
+            preview_path = folder / "preview.png"
+            source = preview_path if preview_path.is_file() else folder / "original.png"
+            if not source.is_file():
+                continue
+            with Image.open(source) as img:
+                rgb = img.convert("RGB")
+                width, height = rgb.size
+                buf = io.BytesIO()
+                rgb.save(buf, format="JPEG", quality=82, optimize=True)
+            sheet = pdf.new_page(width=width, height=height)
+            sheet.insert_image(sheet.rect, stream=buf.getvalue())
+        payload: dict = {"inline_pages": inline_pages}
+        if pdf.page_count:
+            pdf_bytes = pdf.tobytes(deflate=True, garbage=3)
+            stem = Path(job.source_name).stem or "document"
+            name = f"{stem}-gujarati.pdf"
+            payload["inline_export"] = "data:application/pdf;base64," + base64.b64encode(pdf_bytes).decode("ascii")
+            payload["inline_export_name"] = name
+            payload["export_status"] = "ready"
+            payload["export_file"] = name
+            payload["export_name"] = name
+        return payload
+    except Exception as exc:
+        logger.warning("inline assets failed for %s: %s", job_id, exc)
+        return {"inline_pages": inline_pages} if inline_pages else {}
+    finally:
+        pdf.close()
 
 
 def _require_ready(job_id: str) -> None:

@@ -107,7 +107,7 @@ async function convertItem(item) {
   body.append("file", item.file);
   body.append("force_ocr", $("force").checked ? "true" : "false");
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-  const timer = controller ? setTimeout(() => controller.abort(), 50_000) : null;
+  const timer = controller ? setTimeout(() => controller.abort(), 55_000) : null;
   try {
     const job = await api("/api/jobs", {
       method: "POST",
@@ -309,7 +309,34 @@ async function confirmConversion() {
   const done = waiting.filter((item) => item.status === "completed").length;
   if (done && !failed) toast(done === 1 ? "Translation ready" : `${done} files converted`);
   else if (done && failed) toast(`${done} completed, ${failed} failed`);
-  else if (failed) toast("Conversion failed");
+  else if (failed) toast("Conversion failed — tap Retry to try again");
+  focusResult();
+}
+
+async function retryQueueItem(id) {
+  if (state.converting) {
+    toast("Wait for the current conversion to finish");
+    return;
+  }
+  const item = state.queue.find((entry) => entry.id === id && entry.status === "failed");
+  if (!item) return;
+  item.status = "waiting";
+  item.error = null;
+  item.job = null;
+  renderQueue();
+  state.converting = true;
+  $("confirm-convert").disabled = true;
+  try {
+    await convertItem(item);
+  } finally {
+    state.converting = false;
+    $("confirm-convert").disabled = false;
+    hideVeil();
+    renderQueue();
+    render();
+  }
+  if (item.status === "completed") toast("Translation ready");
+  else if (item.status === "failed") toast(item.error || "Conversion failed");
   focusResult();
 }
 
@@ -385,6 +412,9 @@ function renderQueue() {
   document.querySelectorAll("[data-open]").forEach((button) => {
     button.onclick = () => openCompleted(button.dataset.open);
   });
+  document.querySelectorAll("[data-retry]").forEach((button) => {
+    button.onclick = () => retryQueueItem(button.dataset.retry);
+  });
 }
 
 function queueCard(item) {
@@ -396,7 +426,7 @@ function queueCard(item) {
     : item.status === "completed"
       ? `<button type="button" class="primary tiny" data-open="${item.id}">Open</button>`
       : item.status === "failed"
-        ? `<button type="button" class="ghost danger tiny" data-remove="${item.id}">Dismiss</button>`
+        ? `<button type="button" class="primary tiny" data-retry="${item.id}">Retry</button><button type="button" class="ghost danger tiny" data-remove="${item.id}">Dismiss</button>`
         : "";
   const on = item.id === state.activeItemId ? " on" : "";
   return `<li class="queue-item${on}" data-status="${item.status}">
@@ -451,7 +481,9 @@ function conversionStage(job) {
 function render() {
   const job = state.job;
   const busy = state.waitingUpload || (job && (job.status === "processing" || job.status === "queued"));
-  updateVeil(!!busy);
+  // Never leave the veil up once conversion finished or failed.
+  if (!busy) hideVeil();
+  else updateVeil(true);
   document.body.classList.toggle("has-job", !!job || state.waitingUpload || state.converting);
   $("stage-bar").hidden = !job || job.status !== "ready";
   $("export").disabled = !job || job.status !== "ready" || job.export_status === "running";
@@ -460,9 +492,16 @@ function render() {
   const empty = $("empty");
   if (empty) empty.hidden = !!job || state.waitingUpload;
   const download = $("download");
-  if (job && job.export_status === "ready" && job.export_file) {
+  if (job && job.inline_export) {
+    download.hidden = false;
+    download.href = job.inline_export;
+    download.download = job.inline_export_name || job.export_name || "gujarati.pdf";
+    download.removeAttribute("target");
+    download.textContent = `Download ${job.inline_export_name || job.export_name || "PDF"}`;
+  } else if (job && job.export_status === "ready" && job.export_file) {
     download.hidden = false;
     download.href = `/api/jobs/${job.id}/download?v=${job.revision}`;
+    download.removeAttribute("download");
     download.textContent = `Download ${job.export_name}`;
   } else download.hidden = true;
   setSteps(job);
@@ -542,6 +581,17 @@ document.querySelectorAll("[data-mode]").forEach((button) => {
 });
 $("zoom").oninput = () => renderCanvas();
 $("export").onclick = async () => {
+  if (!state.job) return;
+  if (state.job.inline_export && ($("format").value || "pdf").toLowerCase() === "pdf") {
+    const link = document.createElement("a");
+    link.href = state.job.inline_export;
+    link.download = state.job.inline_export_name || state.job.export_name || "gujarati.pdf";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    toast("Download started");
+    return;
+  }
   try {
     showBusyVeil("Exporting…", state.job?.source_name);
     state.job = await api(`/api/jobs/${state.job.id}/export`, {
@@ -551,23 +601,28 @@ $("export").onclick = async () => {
     });
     const item = state.queue.find((entry) => entry.id === state.activeItemId);
     if (item) item.job = state.job;
-    stopFakeProgress();
-    render();
-    poll();
+    await poll();
   } catch (error) {
-    stopFakeProgress();
-    updateVeil(false);
-    toast(error.message);
+    toast(error.message || "Export failed");
+  } finally {
+    hideVeil();
+    render();
   }
 };
 $("retry").onclick = async () => {
-  showBusyVeil("Retrying page…", state.job?.source_name);
-  state.job = await api(`/api/jobs/${state.job.id}/pages/${state.page}/retry`, { method: "POST" });
-  const item = state.queue.find((entry) => entry.id === state.activeItemId);
-  if (item) item.job = state.job;
-  stopFakeProgress();
-  render();
-  poll();
+  if (!state.job) return;
+  try {
+    showBusyVeil("Retrying page…", state.job?.source_name);
+    state.job = await api(`/api/jobs/${state.job.id}/pages/${state.page}/retry`, { method: "POST" });
+    const item = state.queue.find((entry) => entry.id === state.activeItemId);
+    if (item) item.job = state.job;
+    await poll();
+  } catch (error) {
+    toast(error.message || "Retry failed");
+  } finally {
+    hideVeil();
+    render();
+  }
 };
 $("approve").onclick = async () => {
   const page = state.job.pages[state.page];
@@ -710,9 +765,12 @@ function renderCanvas() {
   canvas.classList.toggle("reveal", state.reveal);
   state.reveal = false;
   const zoom = Number($("zoom").value) / 100;
-  const original = `/api/jobs/${job.id}/pages/${state.page}/original?v=${job.revision}`;
-  const preview = `/api/jobs/${job.id}/pages/${state.page}/preview?v=${job.revision}`;
-  const hasPreview = page.render_status === "done";
+  const inline = (job.inline_pages || []).find((entry) => entry.index === state.page) || (job.inline_pages || [])[state.page];
+  const original = (inline && inline.original)
+    || `/api/jobs/${job.id}/pages/${state.page}/original?v=${job.revision}`;
+  const preview = (inline && inline.preview)
+    || `/api/jobs/${job.id}/pages/${state.page}/preview?v=${job.revision}`;
+  const hasPreview = page.render_status === "done" || !!(inline && inline.preview);
   canvas.style.setProperty("--zoom", zoom);
   if (state.mode === "split") {
     canvas.innerHTML = `<div class="split"><div>${sheet("Original", original, false)}</div><div>${sheet("Gujarati", hasPreview ? preview : original, true)}</div></div>`;
