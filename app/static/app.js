@@ -553,6 +553,8 @@ function setSteps(job) {
 
 $("browse").onclick = () => $("file").click();
 $("browse-bulk").onclick = () => $("file-bulk").click();
+const emptyBrowse = $("empty-browse");
+if (emptyBrowse) emptyBrowse.onclick = () => $("file").click();
 $("file").onchange = () => { if ($("file").files[0]) addFiles($("file").files); $("file").value = ""; };
 $("file-bulk").onchange = () => { if ($("file-bulk").files.length) addFiles($("file-bulk").files); $("file-bulk").value = ""; };
 $("confirm-convert").onclick = () => confirmConversion();

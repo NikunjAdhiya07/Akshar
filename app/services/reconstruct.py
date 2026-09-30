@@ -75,7 +75,7 @@ def compose_page(
     document = pymupdf.open()
     page = document.new_page(width=width_pt, height=height_pt)
     stream = _png_bytes(cleaned)
-    page.insert_image(page.rect, stream=stream)
+    page.insert_image(page.rect, stream=stream, keep_proportion=False)
     issues: list[Issue] = []
     archive = pymupdf.Archive(str(FONTS_DIR))
     for block in blocks:

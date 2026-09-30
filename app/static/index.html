@@ -7,18 +7,37 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Akshar">
   <title>Akshar — English to Gujarati</title>
-  <link rel="icon" href="/static/logo.jpg" type="image/jpeg">
+  <link rel="icon" href="/static/logo.png" type="image/png">
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,650&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=12">
+  <link rel="stylesheet" href="/static/styles.css?v=13">
+  <style>
+    /* Prevent black logo flash before stylesheet loads */
+    html, body { margin: 0; background: #efe8fb; }
+    .boot {
+      position: fixed; inset: 0; z-index: 1000;
+      display: grid; place-items: center;
+      background: linear-gradient(180deg, #f7f2ff 0%, #ebe4f8 100%);
+      transition: opacity 0.45s ease, visibility 0.45s ease;
+    }
+    .boot img {
+      width: 88px; height: 88px; border-radius: 22px;
+      background: transparent; display: block;
+      box-shadow: 0 16px 36px rgba(42, 20, 96, 0.18);
+    }
+    .boot.ready { opacity: 0; visibility: hidden; pointer-events: none; }
+  </style>
 </head>
 <body>
+  <div class="boot" id="boot" aria-hidden="true">
+    <img src="/static/logo.png" width="88" height="88" alt="Akshar">
+  </div>
   <div class="wash" aria-hidden="true"></div>
   <header class="top">
     <div class="brand">
-      <img class="logo" src="/static/logo.jpg" width="44" height="44" alt="Akshar">
+      <img class="logo" src="/static/logo.png" width="44" height="44" alt="Akshar">
       <div>
         <strong>Akshar</strong>
         <em>English to Gujarati</em>
@@ -39,7 +58,7 @@
         <input id="file" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" hidden>
         <input id="file-bulk" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple hidden>
         <div class="upload-hero" id="drop">
-          <img class="upload-mark" src="/static/logo.jpg" alt="" aria-hidden="true">
+          <img class="upload-mark" src="/static/logo.png" alt="" aria-hidden="true">
           <p class="upload-title">Upload</p>
           <p class="upload-hint">PDF, JPG, or PNG</p>
           <div class="upload-actions">
@@ -102,9 +121,10 @@
       <div id="canvas" class="canvas">
         <div class="empty" id="empty">
           <div class="empty-brand">
-            <img src="/static/logo.jpg" alt="Akshar" width="72" height="72">
+            <img src="/static/logo.png" alt="Akshar" width="72" height="72">
             <p class="empty-title">Ready to convert</p>
-            <p class="empty-sub">Choose a file in the upload panel to begin</p>
+            <p class="empty-sub">Choose a file below to begin</p>
+            <button id="empty-browse" class="primary empty-cta" type="button">Choose file</button>
           </div>
         </div>
       </div>
@@ -212,7 +232,7 @@
         <span class="orbit"></span>
         <span class="orbit orbit-b"></span>
         <span class="swoosh"></span>
-        <img class="logo-hero" src="/static/logo.jpg" alt="">
+        <img class="logo-hero" src="/static/logo.png" alt="">
       </div>
       <p class="veil-kicker" id="veil-kicker">Akshar</p>
       <p class="veil-title" id="veil-title">Converting to Gujarati…</p>
@@ -226,6 +246,14 @@
     </div>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="/static/app.js?v=12"></script>
+  <script src="/static/app.js?v=13"></script>
+  <script>
+    requestAnimationFrame(() => {
+      const boot = document.getElementById("boot");
+      if (!boot) return;
+      boot.classList.add("ready");
+      setTimeout(() => boot.remove(), 500);
+    });
+  </script>
 </body>
 </html>

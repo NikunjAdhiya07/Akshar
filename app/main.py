@@ -342,13 +342,18 @@ def _inline_assets(job_id: str) -> dict:
             source = preview_path if preview_path.is_file() else folder / "original.png"
             if not source.is_file():
                 continue
+            width_pt = float(page.width_pt) or 612.0
+            height_pt = float(page.height_pt) or 792.0
+            # Keep the PDF MediaBox in original document points (print-ready).
+            sheet = pdf.new_page(width=width_pt, height=height_pt)
             with Image.open(source) as img:
                 rgb = img.convert("RGB")
-                width, height = rgb.size
                 buf = io.BytesIO()
-                rgb.save(buf, format="JPEG", quality=82, optimize=True)
-            sheet = pdf.new_page(width=width, height=height)
-            sheet.insert_image(sheet.rect, stream=buf.getvalue())
+                # Use PNG in the PDF to avoid JPEG recompression artifacts.
+                rgb.save(buf, format="PNG", optimize=True)
+            sheet.insert_image(sheet.rect, stream=buf.getvalue(), keep_proportion=False)
+            sheet.set_mediabox(pymupdf.Rect(0, 0, width_pt, height_pt))
+            sheet.set_cropbox(pymupdf.Rect(0, 0, width_pt, height_pt))
         payload: dict = {"inline_pages": inline_pages}
         if pdf.page_count:
             pdf_bytes = pdf.tobytes(deflate=True, garbage=3)
