@@ -2,18 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2a1460">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Akshar">
   <title>Akshar — English to Gujarati</title>
+  <link rel="icon" href="/static/logo.jpg" type="image/jpeg">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,650&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=7">
+  <link rel="stylesheet" href="/static/styles.css?v=8">
 </head>
 <body>
   <div class="wash" aria-hidden="true"></div>
   <header class="top">
     <div class="brand">
-      <span class="mark" aria-hidden="true"><span class="orb orb-mark"><i></i></span></span>
+      <img class="logo" src="/static/logo.jpg" width="44" height="44" alt="Akshar">
       <div>
         <strong>Akshar</strong>
         <em>English to Gujarati</em>
@@ -26,24 +31,6 @@
       <li>Preview</li>
       <li>Export</li>
     </ol>
-    <div class="export-bar">
-      <label>Format
-        <select id="format">
-          <option value="pdf">Gujarati PDF</option>
-          <option value="png">PNG</option>
-          <option value="jpg">JPG</option>
-        </select>
-      </label>
-      <label>Quality
-        <select id="dpi">
-          <option value="standard">Standard · 150 DPI</option>
-          <option value="high" selected>High · 300 DPI</option>
-          <option value="print">Print · 600 DPI</option>
-        </select>
-      </label>
-      <button id="export" class="primary" disabled>Export</button>
-      <a id="download" class="download" hidden>Download</a>
-    </div>
   </header>
 
   <main>
@@ -89,7 +76,6 @@
           <button data-mode="overlay">Overlay</button>
         </div>
         <label class="zoom">Zoom <input id="zoom" type="range" min="60" max="180" value="100"></label>
-        <button id="add" class="ghost" disabled>Add text</button>
       </div>
       <div id="canvas" class="canvas">
         <div class="empty" id="empty">
@@ -146,6 +132,28 @@
     </aside>
   </main>
 
+  <nav class="action-dock" id="action-dock" aria-label="Document actions">
+    <div class="export-bar">
+      <label>Format
+        <select id="format">
+          <option value="pdf">Gujarati PDF</option>
+          <option value="png">PNG</option>
+          <option value="jpg">JPG</option>
+        </select>
+      </label>
+      <label>Quality
+        <select id="dpi">
+          <option value="standard">Standard · 150 DPI</option>
+          <option value="high" selected>High · 300 DPI</option>
+          <option value="print">Print · 600 DPI</option>
+        </select>
+      </label>
+      <button id="add" class="ghost" type="button" disabled>Add text</button>
+      <button id="export" class="primary" type="button" disabled>Export</button>
+      <a id="download" class="download" hidden>Download</a>
+    </div>
+  </nav>
+
   <div id="veil" class="veil" hidden role="status" aria-live="polite">
     <div class="veil-card">
       <div class="orb-wrap" aria-hidden="true">
@@ -189,6 +197,6 @@
     </div>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="/static/app.js?v=7"></script>
+  <script src="/static/app.js?v=8"></script>
 </body>
 </html>
