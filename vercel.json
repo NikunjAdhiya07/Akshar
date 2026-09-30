@@ -1,8 +1,14 @@
 {
+  "build": {
+    "env": {
+      "VERCEL_SUPPORT_LARGE_FUNCTIONS": "1"
+    }
+  },
   "functions": {
     "api/index.py": {
       "maxDuration": 60,
-      "includeFiles": "{fonts/**,app/static/**,samples/**}"
+      "includeFiles": "{fonts/*.ttf,fonts/OFL.txt,app/static/**}",
+      "excludeFiles": "{tests/**,samples/**,supabase/**,fonts/noto-src/**,fonts/*.zip,.git/**,data/**,.venv/**,Dockerfile,render.yaml,README.md}"
     }
   },
   "rewrites": [

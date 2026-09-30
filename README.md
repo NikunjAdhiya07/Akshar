@@ -20,11 +20,12 @@ Akshar can run on Vercel as a **Python FastAPI** serverless function.
 2. Vercel → **Add New Project** → import that repo.
 3. Framework preset: **Other**. Root directory: `.`
 4. Add Environment Variables (same as `.env`):
+   - `VERCEL_SUPPORT_LARGE_FUNCTIONS` = `1` (**required** — OCR stack is >500 MB)
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `SUPABASE_ANON_KEY` (optional)
    - `SUPABASE_STORAGE_BUCKET` = `akshar-documents`
-5. Deploy.
+5. Deploy (Fluid Compute must be on — default for new projects).
 
 What was fixed for Vercel:
 - `api/index.py` exports the FastAPI `app`
