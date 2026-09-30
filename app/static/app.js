@@ -28,32 +28,20 @@ function toast(message) {
 
 async function api(url, options = {}) {
   const response = await fetch(url, options);
-  const type = response.headers.get("content-type") || "";
-  if (type.includes("application/x-ndjson") || type.includes("ndjson")) {
-    return readJobStream(response);
-  }
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.detail || "Request failed");
-  return data;
-}
-
-async function readJobStream(response) {
+  const type = (response.headers.get("content-type") || "").toLowerCase();
+  const raw = await response.text();
   if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error(data.detail || `Conversion failed (${response.status})`);
+    let data = {};
+    try { data = JSON.parse(raw); } catch {}
+    const detail = data.detail;
+    const message = typeof detail === "string"
+      ? detail
+      : (Array.isArray(detail) ? detail.map((item) => item.msg || item).join(", ") : null);
+    throw new Error(message || data.error || raw || `Request failed (${response.status})`);
   }
-  if (!response.body) throw new Error("No conversion stream from server");
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let job = null;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
-    for (const line of lines) {
+  if (type.includes("ndjson") || (raw.startsWith("{") && raw.includes("\n{"))) {
+    let job = null;
+    for (const line of raw.split("\n")) {
       if (!line.trim()) continue;
       let message;
       try { message = JSON.parse(line); } catch { continue; }
@@ -67,9 +55,34 @@ async function readJobStream(response) {
         throw new Error(message.detail || job?.error || "Conversion failed");
       }
     }
+    if (!job) throw new Error("Conversion ended without a result");
+    return job;
   }
-  if (!job) throw new Error("Conversion ended without a result");
-  return job;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error("Invalid server response");
+  }
+}
+
+function hideVeil() {
+  state.waitingUpload = false;
+  stopFakeProgress();
+  const veil = $("veil");
+  if (!veil) return;
+  clearTimeout(updateVeil._hide);
+  if (veil.hidden) {
+    veil.classList.remove("leave");
+    return;
+  }
+  veil.classList.add("leave");
+  state.reveal = true;
+  updateVeil._hide = setTimeout(() => {
+    veil.hidden = true;
+    veil.classList.remove("leave");
+    const file = $("veil-file");
+    if (file) file.textContent = "";
+  }, 420);
 }
 
 function applyStreamProgress(job) {
@@ -88,14 +101,13 @@ async function convertItem(item) {
   item.error = null;
   renderQueue();
   state.waitingUpload = true;
-  state.converting = true;
   showBusyVeil("Converting to Gujarati…", item.name);
   focusResult();
   const body = new FormData();
   body.append("file", item.file);
   body.append("force_ocr", $("force").checked ? "true" : "false");
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-  const timer = controller ? setTimeout(() => controller.abort(), 55_000) : null;
+  const timer = controller ? setTimeout(() => controller.abort(), 50_000) : null;
   try {
     const job = await api("/api/jobs", {
       method: "POST",
@@ -106,9 +118,10 @@ async function convertItem(item) {
     if (job.status === "error") {
       item.status = "failed";
       item.error = job.error || "Conversion failed";
-    } else if (job.status === "processing" || job.status === "queued") {
-      // Local fluent path: request returned early, keep polling.
-      item.status = "converting";
+      toast(item.error);
+      return;
+    }
+    if (job.status === "processing" || job.status === "queued") {
       state.activeItemId = item.id;
       state.job = job;
       render();
@@ -120,26 +133,23 @@ async function convertItem(item) {
       } else {
         item.status = "failed";
         item.error = state.job?.error || "Conversion failed";
+        toast(item.error);
       }
-    } else {
-      item.status = "completed";
-      openCompleted(item.id, { silent: true });
+      return;
     }
+    item.status = "completed";
+    openCompleted(item.id, { silent: true });
   } catch (error) {
     item.status = "failed";
     const aborted = error?.name === "AbortError";
     item.error = aborted
-      ? "Timed out on Vercel. Use a single-page PDF/image, or prefer text PDFs over heavy scans."
+      ? "Timed out. Try a single-page text PDF or a smaller image."
       : (error.message || "Conversion failed");
     toast(item.error);
   } finally {
     if (timer) clearTimeout(timer);
     state.waitingUpload = false;
-    const moreWaiting = state.queue.some((entry) => entry.status === "waiting");
-    if (!(state.converting && moreWaiting)) {
-      stopFakeProgress();
-      updateVeil(false);
-    }
+    hideVeil();
     renderQueue();
     render();
   }
@@ -149,7 +159,7 @@ async function pollUntilReady() {
   if (!state.job) return;
   const started = Date.now();
   while (state.job && (state.job.status === "processing" || state.job.status === "queued")) {
-    if (Date.now() - started > 55_000) throw new Error("Conversion is taking too long. Try a smaller file.");
+    if (Date.now() - started > 50_000) throw new Error("Conversion is taking too long. Try a smaller file.");
     state.job = await api(`/api/jobs/${state.job.id}`);
     applyStreamProgress(state.job);
     render();
@@ -284,11 +294,17 @@ async function confirmConversion() {
   }
   state.converting = true;
   $("confirm-convert").disabled = true;
-  for (const item of waiting) {
-    await convertItem(item);
+  try {
+    for (const item of waiting) {
+      await convertItem(item);
+    }
+  } finally {
+    state.converting = false;
+    $("confirm-convert").disabled = false;
+    hideVeil();
+    renderQueue();
+    render();
   }
-  state.converting = false;
-  $("confirm-convert").disabled = false;
   const failed = waiting.filter((item) => item.status === "failed").length;
   const done = waiting.filter((item) => item.status === "completed").length;
   if (done && !failed) toast(done === 1 ? "Translation ready" : `${done} files converted`);
@@ -396,7 +412,7 @@ function queueCard(item) {
 
 function updateVeil(converting) {
   const veil = $("veil");
-  if (converting || state.waitingUpload || state.converting) {
+  if (converting || state.waitingUpload) {
     clearTimeout(updateVeil._hide);
     veil.hidden = false;
     veil.classList.remove("leave");
@@ -415,15 +431,7 @@ function updateVeil(converting) {
     }
     return;
   }
-  stopFakeProgress();
-  if (veil.hidden || veil.classList.contains("leave")) return;
-  veil.classList.add("leave");
-  state.reveal = true;
-  updateVeil._hide = setTimeout(() => {
-    veil.hidden = true;
-    veil.classList.remove("leave");
-    $("veil-file").textContent = "";
-  }, 620);
+  hideVeil();
 }
 
 function conversionStage(job) {
@@ -442,7 +450,7 @@ function conversionStage(job) {
 
 function render() {
   const job = state.job;
-  const busy = state.waitingUpload || state.converting || (job && (job.status === "processing" || job.status === "queued"));
+  const busy = state.waitingUpload || (job && (job.status === "processing" || job.status === "queued"));
   updateVeil(!!busy);
   document.body.classList.toggle("has-job", !!job || state.waitingUpload || state.converting);
   $("stage-bar").hidden = !job || job.status !== "ready";
@@ -450,7 +458,7 @@ function render() {
   $("add").disabled = !job || job.status !== "ready";
   $("summary").hidden = !job;
   const empty = $("empty");
-  if (empty) empty.hidden = !!job || state.waitingUpload || state.converting;
+  if (empty) empty.hidden = !!job || state.waitingUpload;
   const download = $("download");
   if (job && job.export_status === "ready" && job.export_file) {
     download.hidden = false;
@@ -688,7 +696,7 @@ function renderCanvas() {
   const canvas = $("canvas");
   const job = state.job;
   if (!job || !job.pages.length) return;
-  if (job.status === "processing" || job.status === "queued" || state.waitingUpload || state.converting) {
+  if (job.status === "processing" || job.status === "queued" || state.waitingUpload) {
     canvas.innerHTML = "";
     return;
   }
