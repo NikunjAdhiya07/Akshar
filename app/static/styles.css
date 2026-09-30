@@ -86,12 +86,9 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   height: 44px;
   border-radius: 12px;
   object-fit: cover;
-  background: transparent;
+  background: #2a1460;
   box-shadow: 0 8px 18px rgba(42, 20, 96, 0.35);
   flex: none;
-  /* Force clip on Android WebViews that ignore radius on <img> paint */
-  -webkit-mask-image: -webkit-radial-gradient(white, black);
-  mask-image: radial-gradient(white, black);
 }
 .mark { display: grid; place-items: center; }
 .brand strong {
@@ -282,11 +279,9 @@ h2 {
   height: 56px;
   border-radius: 16px;
   object-fit: cover;
-  background: transparent;
+  background: #ffffff;
   box-shadow: 0 12px 28px rgba(42, 20, 96, 0.28);
   animation: orb-float 4.6s ease-in-out infinite;
-  -webkit-mask-image: -webkit-radial-gradient(white, black);
-  mask-image: radial-gradient(white, black);
 }
 .upload-title {
   margin: 12px 0 4px;
@@ -519,11 +514,9 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
   height: 72px;
   border-radius: 20px;
   object-fit: cover;
-  background: transparent;
+  background: #ffffff;
   box-shadow: 0 16px 36px rgba(42, 20, 96, 0.22);
   margin-bottom: 14px;
-  -webkit-mask-image: -webkit-radial-gradient(white, black);
-  mask-image: radial-gradient(white, black);
 }
 .empty-title {
   margin: 0 0 6px;
@@ -1021,14 +1014,12 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
   margin: -46px 0 0 -46px;
   border-radius: 24px;
   object-fit: cover;
-  background: transparent;
+  background: #2a1460;
   z-index: 4;
   box-shadow:
     0 18px 40px rgba(42, 20, 96, 0.28),
     0 0 0 3px rgba(255, 214, 150, 0.35);
   animation: logo-pulse 3.2s var(--ease) infinite;
-  -webkit-mask-image: -webkit-radial-gradient(white, black);
-  mask-image: radial-gradient(white, black);
 }
 .convert-scene .swoosh {
   position: absolute;
@@ -1179,36 +1170,48 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
 }
 
 @media (max-width: 1100px) {
+  html, body {
+    height: auto;
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
   body {
-    overflow: auto;
-    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  body.has-job {
+    padding-bottom: calc(118px + env(safe-area-inset-bottom, 0px));
   }
   main {
     grid-template-columns: 1fr;
     height: auto;
+    min-height: 0;
     display: flex;
     flex-direction: column;
   }
   .top {
     height: auto;
     flex-wrap: wrap;
-    padding: 12px 14px;
+    gap: 10px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-top, 0px) * 0);
+    padding-top: max(10px, env(safe-area-inset-top, 0px));
     position: sticky;
     top: 0;
   }
-  .brand { min-width: 0; }
+  .brand { min-width: 0; gap: 8px; }
   .brand em { display: none; }
-  .logo { width: 40px; height: 40px; border-radius: 11px; }
+  .brand strong { font-size: 20px; }
+  .logo { width: 36px; height: 36px; border-radius: 10px; }
   .steps {
     order: 3;
     width: 100%;
     overflow-x: auto;
     scrollbar-width: none;
+    flex: none;
   }
   .steps::-webkit-scrollbar { display: none; }
-  .steps li { white-space: nowrap; font-size: 12px; padding: 6px 10px; }
+  .steps li { white-space: nowrap; font-size: 11px; padding: 6px 9px; }
 
-  /* Upload first on mobile — no scrolling past empty state to find Choose file */
   .rail {
     order: 1;
     padding: 12px 12px 8px;
@@ -1227,21 +1230,27 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
   }
   body:not(.has-job) .editor,
   body:not(.has-job) .compact-log,
-  body:not(.has-job) #summary {
+  body:not(.has-job) #summary,
+  body:not(.has-job) .stage,
+  body:not(.has-job) .action-dock {
     display: none !important;
   }
-  body:not(.has-job) .stage {
-    display: none;
-  }
   body:not(.has-job) .rail {
-    min-height: calc(100dvh - 140px);
+    min-height: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
   }
   body:not(.has-job) .upload-card {
     margin: 0;
     padding: 16px 14px 18px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
   body:not(.has-job) .upload-hero {
-    padding: 18px 14px 16px;
+    padding: 20px 14px 18px;
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -1249,16 +1258,15 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
     justify-content: center;
   }
   body:not(.has-job) .upload-mark {
-    width: 64px;
-    height: 64px;
+    width: 72px;
+    height: 72px;
+    border-radius: 20px;
   }
   body:not(.has-job) .upload-title {
     margin-top: 10px;
-    font-size: clamp(24px, 6.5vw, 32px);
+    font-size: clamp(26px, 7vw, 34px);
   }
-  body:not(.has-job) .upload-hint {
-    margin-bottom: 12px;
-  }
+  body:not(.has-job) .upload-hint { margin-bottom: 14px; }
   body:not(.has-job) .upload-actions {
     width: 100%;
     flex-direction: column;
@@ -1267,16 +1275,15 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
   body:not(.has-job) .upload-actions .ghost {
     width: 100%;
     min-height: 48px;
+    display: inline-flex;
+    align-items: center;
     justify-content: center;
-  }
-  body:not(.has-job) .action-dock {
-    display: none;
   }
 
   .rail, .editor { animation: none; }
   body.has-job .rail .upload-hero { display: none; }
   body.has-job .stage {
-    min-height: 62vh;
+    min-height: 58vh;
     scroll-margin-top: 12px;
     order: 1;
     margin: 0;
@@ -1286,13 +1293,13 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
   body.has-job .editor { order: 3; }
   .stage-bar {
     position: sticky;
-    top: 64px;
+    top: 58px;
     z-index: 20;
     background: rgba(247, 242, 255, 0.94);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
   }
-  .canvas { padding: 16px 12px 28px; }
+  .canvas { padding: 16px 12px 28px; overflow-x: hidden; }
   .empty {
     margin: 4vh auto 2vh;
     padding: 0 8px;
@@ -1303,6 +1310,7 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
     align-items: center;
     justify-content: center;
   }
+  .sheet { margin: 16px auto; }
   .convert-scene .logo-hero { width: 78px; height: 78px; margin: -39px 0 0 -39px; border-radius: 20px; }
   .lang-chip { min-width: 30px; height: 30px; font-size: 13px; }
 
@@ -1327,7 +1335,7 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
     pointer-events: auto;
   }
   .action-dock .export-bar label { width: 100%; }
-  .action-dock .export-bar select { width: 100%; }
+  .action-dock .export-bar select { width: 100%; font-size: 16px; }
   .action-dock #add,
   .action-dock #export,
   .action-dock #download {
@@ -1351,4 +1359,12 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
   .veil-steps li { font-size: 11px; padding: 5px 8px; }
   .panel { margin-top: 10px; }
   .queue-item { grid-template-columns: 44px minmax(0, 1fr) auto; }
+  select, textarea, input { font-size: 16px; }
+}
+
+@media (max-width: 430px) {
+  .steps li { padding: 5px 8px; font-size: 10.5px; }
+  body:not(.has-job) .upload-card { padding: 12px; }
+  body:not(.has-job) .upload-hero { padding: 16px 12px; }
+  body:not(.has-job) .upload-mark { width: 64px; height: 64px; }
 }
